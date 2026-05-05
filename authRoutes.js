@@ -1,58 +1,32 @@
-const express = require("express");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-
-const router = express.Router();
-
-// Memory DB (simplified for Task 9)
-let users = [];
-
-// POST /api/secondchance/auth/register
-router.post("/api/secondchance/auth/register", async (req, res) => {
+// In authRoutes.js - PUT /update endpoint
+router.put('/update', authenticateToken, async (req, res) => {
   try {
-    const { username, email, password } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = { id: users.length + 1, username, email, password: hashedPassword };
-    users.push(user);
-    res.status(201).json({ id: user.id, username, email });
-  } catch (err) {
-    res.status(500).json({ error: "Registration failed" });
+    const userId = req.user.id;
+    const { username, email, bio } = req.body;
+
+    // Find user
+    const user = await users.findOne({ _id: userId });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update only provided fields
+    if (username !== undefined) user.username = username;
+    if (email !== undefined) user.email = email;
+    if (bio !== undefined) user.bio = bio;
+    else user.bio = user.bio || '';  // keep existing bio if not provided
+
+    await users.updateOne({ _id: userId }, { $set: user });
+
+    res.status(200).json({
+      message: 'User updated successfully',
+      user: {
+        username: user.username,
+        email: user.email,
+        bio: user.bio
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
-
-// POST /api/secondchance/auth/login
-router.post("/api/secondchance/auth/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const user = users.find((u) => u.email === email);
-    if (!user) return res.status(400).json({ error: "User not found" });
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ error: "Invalid password" });
-
-    const token = jwt.sign({ id: user.id, email: user.email }, "secretkey", { expiresIn: "1h" });
-
-    res.json({ id: user.id, username: user.username, token });
-  } catch (err) {
-    res.status(500).json({ error: "Login failed" });
-  }
-});
-
-// PUT /api/secondchance/auth/user (update user info)
-router.put("/api/secondchance/auth/user", (req, res) => {
-  try {
-    const { id, username, email, bio } = req.body;
-    const user = users.find((u) => u.id === id);
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    if (username) user.username = username;
-    if (email) user.email = email;
-    if (bio) user.bio = bio;
-
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to update user" });
-  }
-});
-
-module.exports = router;s
